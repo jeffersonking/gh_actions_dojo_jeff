@@ -1,0 +1,38 @@
+name: Hotfix
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: 'Commit hash to cherry-pick'
+        required: true
+        type: string
+
+jobs:
+  cherry-pick:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for cherry-pick
+          token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+      
+      - run: |
+          git checkout prod
+          git pull origin prod
+      
+      - run: |
+          git cherry-pick ${{ inputs.commit_hash }}
+        continue-on-error: false
+      
+      - run: |
+          git push origin prod
+
