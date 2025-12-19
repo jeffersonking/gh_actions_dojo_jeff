@@ -24,8 +24,7 @@ jobs:
           app-id: 2271240 # joy-github-app
           private-key: ${{ secrets.JOY_GITHUB_APP_PRIVATE_KEY }}
 
-      - name: Checkout repository
-        uses: actions/checkout@v5
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -40,8 +39,8 @@ jobs:
 
       - name: Configure git and checkout prod branch
         run: |
-          git config user.name "${{ github.actor }}"
-          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git config user.name "${{ steps.app-token.outputs.app-slug }}"
+          git config user.email "${{ steps.app-token.outputs.app-slug }}@users.noreply.github.com"
           git fetch origin
           git checkout origin/prod
 
@@ -91,7 +90,7 @@ jobs:
       # GitHub CLI (gh) is pre-installed on GitHub-hosted runners, including ubuntu-latest.
       - name: Create Pull Request
         env:
-          GH_TOKEN: ${{ secrets.HOTFIX_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_TITLE: "HOTFIX: ${{ steps.branch-info.outputs.commit_title }}"
         run: |
           COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ inputs.commit_hash }}"
@@ -99,6 +98,4 @@ jobs:
             --base prod \
             --title "$PR_TITLE" \
             --body "Cherry-pick [${{ inputs.commit_hash }}]($COMMIT_URL)" \
-            --assignee "${{ github.actor }}"
-
-
+            --assignee "${{ steps.app-token.outputs.app-slug }}"
