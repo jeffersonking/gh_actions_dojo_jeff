@@ -18,6 +18,12 @@ jobs:
   create-hotfix-pr:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: 2271240 # joy-github-app
+          private-key: ${{ secrets.JOY_GITHUB_APP_PRIVATE_KEY }}
+
       - name: Checkout repository
         uses: actions/checkout@v5
         with:
