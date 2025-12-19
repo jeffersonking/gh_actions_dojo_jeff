@@ -1,0 +1,98 @@
+# Agent-generated
+
+name: Hotfix PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit_hash:
+        description: 'Commit hash to cherry-pick'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  create-hotfix-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Validate commit hash
+        run: |
+          # Validate commit hash format (7-40 hex characters for SHA-1)
+          if ! [[ "${{ inputs.commit_hash }}" =~ ^[0-9a-f]{7,40}$ ]]; then
+            echo "Error: Invalid commit hash format. Expected 7-40 hexadecimal characters."
+            exit 1
+          fi
+          echo "Commit hash format validated: ${{ inputs.commit_hash }}"
+
+      - name: Configure git and checkout prod branch
+        run: |
+          git config user.name "${{ github.actor }}"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git fetch origin
+          git checkout origin/prod
+
+      - name: Get commit title and generate branch name
+        id: branch-info
+        run: |
+          COMMIT_TITLE=$(git log -1 --format=%s "${{ inputs.commit_hash }}")
+          echo "commit_title=$COMMIT_TITLE" >> $GITHUB_OUTPUT
+          
+          # Convert commit title to PascalCase branch name
+          # Remove special characters, normalize to lowercase, then capitalize first letter of each word
+          BRANCH_NAME=$(echo "$COMMIT_TITLE" | \
+            sed 's/[^a-zA-Z0-9]/-/g' | \
+            tr '[:upper:]' '[:lower:]' | \
+            sed 's/-/ /g' | \
+            awk '{for(i=1;i<=NF;i++){if(length($i)>0){$i=toupper(substr($i,1,1)) substr($i,2)}}}1' | \
+            tr -d ' ')
+          
+          # Remove any remaining non-alphanumeric characters
+          BRANCH_NAME=$(echo "$BRANCH_NAME" | sed 's/[^a-zA-Z0-9]//g')
+          
+          # Limit length to 233 chars for title portion (HOTFIX- prefix is 7 chars, total limit is 240)
+          BRANCH_NAME=$(echo "$BRANCH_NAME" | cut -c1-233)
+          
+          # Ensure it starts with HOTFIX-
+          BRANCH_NAME="HOTFIX-$BRANCH_NAME"
+          
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "Generated branch name: $BRANCH_NAME"
+          echo "Commit title: $COMMIT_TITLE"
+
+      - name: Check if branch already exists
+        run: |
+          BRANCH_NAME="${{ steps.branch-info.outputs.branch_name }}"
+          if git ls-remote --heads origin "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+            echo "Error: Branch $BRANCH_NAME already exists. Please use a different commit or delete the existing branch."
+            exit 1
+          fi
+          echo "Branch $BRANCH_NAME does not exist, proceeding..."
+
+      - name: Create hotfix branch, cherry-pick commit, and push
+        run: |
+          git checkout -b "${{ steps.branch-info.outputs.branch_name }}"
+          git cherry-pick "${{ inputs.commit_hash }}"
+          git push origin "${{ steps.branch-info.outputs.branch_name }}"
+
+      # GitHub CLI (gh) is pre-installed on GitHub-hosted runners, including ubuntu-latest.
+      - name: Create Pull Request
+        env:
+          GH_TOKEN: ${{ secrets.HOTFIX_TOKEN }}
+          PR_TITLE: "HOTFIX: ${{ steps.branch-info.outputs.commit_title }}"
+        run: |
+          COMMIT_URL="${{ github.server_url }}/${{ github.repository }}/commit/${{ inputs.commit_hash }}"
+          gh pr create \
+            --base prod \
+            --title "$PR_TITLE" \
+            --body "Cherry-pick [${{ inputs.commit_hash }}]($COMMIT_URL)" \
+            --assignee "${{ github.actor }}"
+
+
