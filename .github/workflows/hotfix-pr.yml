@@ -98,4 +98,3 @@ jobs:
             --base prod \
             --title "$PR_TITLE" \
             --body "Cherry-pick [${{ inputs.commit_hash }}]($COMMIT_URL)" \
-            --assignee "${{ steps.app-token.outputs.app-slug }}"
